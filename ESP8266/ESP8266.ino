@@ -76,18 +76,20 @@ void setup()
     
   if (connection_established)   {           // If connection attempts failed
 
-    String cmd = "+CIPSTART=\"TCP\",\""; cmd += "erp.rockcityfmradio.com"; cmd += "\",80"; // Establish TCP connection
+//    String cmd = "+CIPSTART=\"TCP\",\""; cmd += "erp.rockcityfmradio.com"; cmd += "\",80"; // Establish TCP connection
+    String cmd = "+CIPSTART=\"TCP\",\""; cmd += "192.168.43.103"; cmd += "\",80"; // Establish TCP connection
+    char host_buf[100]; 
+    cmd.toCharArray(host_buf, 100);
     _delay_ms(2000);
     Serial.println("Connecting to Host...!!!");
-    Serial.println(cmd);
+    Serial.println(host_buf);
 
-    while(!expect_AT_OK("+CIPSTART=\"TCP\",\"erp.rockcityfmradio.com\",80", 6000)) {
+    while(!expect_AT_OK(host_buf/*"+CIPSTART=\"TCP\",\"192.168.43.94\",80"*/, 6000)) {
 //      expect_scan(F("+SAPBR: 1,%hu,\"%*hu.%*hu.%*hu.%*hu\""), &status, 3000); //+SAPBR: 1,1,"10.96.42.184"
       //Todo: limit loop
-      _delay_ms(4000);
+      _delay_ms(7000);
       Serial.println("Connecting to Host...!!!");
       expect_AT_OK("+CIPCLOSE", 3000);
-//      if(expect("ALREAY CONNECT", 6000)) break;
       eat_echo();
     }
 
