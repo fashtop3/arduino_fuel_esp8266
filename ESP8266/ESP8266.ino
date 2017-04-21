@@ -1,5 +1,6 @@
 #include <SoftwareSerial.h>
 #include <util/delay.h>
+#include <avr/wdt.h>
 
 #define SSID        "ADYbWU";//"SUCCESS"                                        // Wifi SSID
 #define PASS        "nokia66542";//"olatundeayo44"                                    // WiFi Password
@@ -14,6 +15,7 @@
 #define KEROS_ECHO   7
 #define CONNECT_WIFI_LED 12
 #define CONNECT_HOST_LED 13
+#define MODULE_RST 9
 
 // It is possible we dont use equal tank
 #define DIESEL_TANK_HEIGHT  400.00   //in cm
@@ -42,13 +44,17 @@ void echoSkip();
 boolean expect(const char *, uint16_t);
 boolean connectWiFi();
 void errorHalt();
-void connectToHost(String, int);
 
 SoftwareSerial ESP8266(10,11); // RX (goes to TX on ESP), TX (goes to RX on ESP)
 
 
 void setup()
 {
+  pinMode(CONNECT_HOST_LED, OUTPUT);
+  pinMode(CONNECT_WIFI_LED, OUTPUT);
+  pinMode(MODULE_RST, OUTPUT);
+  digitalWrite(CONNECT_HOST_LED, LOW);
+  digitalWrite(MODULE_RST, HIGH);
 
   ultra_module_config();
   wifi_setup();
@@ -102,7 +108,7 @@ void wifi_setup()
   ESP8266.begin(9600); //connection to ESP8266
   Serial.begin(9600); //serial debug
   
-  _delay_ms(1000);
+  _delay_ms(2000);
   Serial.println("Restarting...");
   if(expect_AT("+RST", "OK", 2000)) {
      Serial.println("Restarted...");     
@@ -115,7 +121,7 @@ void wifi_setup()
   expect_AT_OK("E0", 2000);
   eat_echo();
     
-//  echoCommand("+RST", "ready", CONTINUE);
+
   expect_AT_OK("+CWMODE=1", 6000);    // Station mode
 
   expect_AT_OK("+CIPMUX=0", 6000);    // Allow multiple connections (we'll only use the first).
@@ -123,21 +129,15 @@ void wifi_setup()
   expect_AT_OK("+CWQAP", 3000);
   _delay_ms(500);
   
-  if (!expect_AT_OK("+CIPSTATUS", 6000)){
+  while (!expect_AT_OK("+CIPSTATUS", 6000)){
       Serial.println("Not connected...!!!");
-      //connect to wifi network
-      for(int i=0;i<5;i++)                     // For 5 attempts
-      {
-        Serial.println("Connecting...");
-        connectWiFi();
-        _delay_ms(4000);
-        if (expect_AT_OK("+CIPSTATUS", 6000)){
-            Serial.println("Connected!!!");
-            is_connected_to_network = true;       // Set connection state
-            break;                               // Break connection loop
-        }  
-      }
-    }
+      Serial.println("Connecting...");
+      connectWiFi();
+      _delay_ms(4000);
+    } 
+
+    Serial.println("Connected!!!");
+    is_connected_to_network = true;       // Set connection state
 
     expect_AT_OK("+CIPCLOSE", 3000);
     _delay_ms(3000);
@@ -165,10 +165,6 @@ void ultra_module_config()
   
   pinMode(KEROS_TRIG, OUTPUT);     // Digital PIN 6
   pinMode(KEROS_ECHO, INPUT);      // Digital PIN 7
-  
-
-  pinMode(CONNECT_WIFI_LED, OUTPUT);  // Digital PIN 12
-  pinMode(CONNECT_HOST_LED, OUTPUT);  // Digital PIN 13
 }
 
 double distance_detect(uint8_t trig_pin, uint8_t echo_pin, double tank_height)
@@ -216,46 +212,47 @@ void WebRequest(double petro, double kero, double diesel){
 }
 
 
-void connectToHost(String host, int port)
+void reConnectToHost(const String host, const int port)
 {
-
-      expect_AT_OK("+CIPCLOSE", 3000);
-      _delay_ms(3000);
+  static uint8_t reconnect_attempt = 0;
+  
+//      expect_AT_OK("+CIPCLOSE", 3000);
+//      _delay_ms(1000);
       String cmd = "+CIPSTART=\"TCP\",\""; cmd += host; cmd += "\","; cmd += port; // Establish TCP connection
       char host_buf[100]; 
       cmd.toCharArray(host_buf, 100);
-      _delay_ms(2000);
       Serial.println("Connecting to Host...!!!");
       Serial.println(host_buf);
   
       while(!expect_AT_OK(host_buf/*"+CIPSTART=\"TCP\",\"192.168.43.94\",80"*/, 6000)) {
+        if(reconnect_attempt >= 5) {
+          Serial.println("Should Restart Module...!!!");
+          reconnect_attempt = 0;
+          module_restart();
+        }
         _delay_ms(5000);
         Serial.println("Connecting to Host...!!!");
         expect_AT_OK("+CIPCLOSE", 3000);
+        digitalWrite(CONNECT_HOST_LED, LOW);
+        Serial.println("Connect to host LED Should off...!!!");
         eat_echo();
+        ++reconnect_attempt;
     }
 
+    digitalWrite(CONNECT_HOST_LED, HIGH);
+    reconnect_attempt = 0;
     Serial.println("Connected to Host...!!!");
 }
 
-void reConnectToHost(const String host, const int port)
+void module_restart()
 {
-      expect_AT_OK("+CIPCLOSE", 3000);
-      _delay_ms(1000);
-      String cmd = "+CIPSTART=\"TCP\",\""; cmd += host; cmd += "\","; cmd += port; // Establish TCP connection
-      char host_buf[100]; 
-      cmd.toCharArray(host_buf, 100);
-      Serial.println("Connecting to Host...!!!");
-      Serial.println(host_buf);
-  
-      while(!expect_AT_OK(host_buf/*"+CIPSTART=\"TCP\",\"192.168.43.94\",80"*/, 6000)) {
-        _delay_ms(5000);
-        Serial.println("Connecting to Host...!!!");
-        expect_AT_OK("+CIPCLOSE", 3000);
-        eat_echo();
-    }
-
-    Serial.println("Connected to Host...!!!");
+  digitalWrite(MODULE_RST, LOW);
+  delay(300);
+  digitalWrite(MODULE_RST, HIGH);
+  delay(300);
+  wdt_enable(WDTO_30MS);
+  wdt_reset();
+  delay(100);
 }
 
 bool expect_AT(const char *cmd, const char *expected, uint16_t timeout)
