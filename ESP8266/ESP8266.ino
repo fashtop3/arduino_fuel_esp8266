@@ -8,13 +8,10 @@
 
 #define DIESEL_TRIG  2
 #define DIESEL_ECHO  3
-
 #define PETRO_TRIG   4
 #define PETRO_ECHO   5
-
 #define KEROS_TRIG   6
 #define KEROS_ECHO   7
-
 #define CONNECT_WIFI_LED 12
 #define CONNECT_HOST_LED 13
 
@@ -29,6 +26,8 @@
  */
 volatile double duration, distance;
 volatile double keroseneLevel, dieselLevel,  petrolLevel;
+volatile bool is_connected_host = false;
+volatile bool is_connected_to_network = false;
 
 int buf_size = 64;
 const String HOST = "192.168.43.103";
@@ -66,9 +65,9 @@ void loop()
 
     // The following code is working to accept the level
     // of the Three materials
-    dieselLevel = distance_detect(DIESEL_TRIG, DIESEL_ECHO, DIESEL_TANK_HEIGHT);
-    keroseneLevel = distance_detect(KEROS_TRIG, KEROS_ECHO, KEROS_TANK_HEIGHT);
-    petrolLevel = distance_detect(PETRO_TRIG, PETRO_ECHO, PETROL_TANK_HEIGHT);
+    dieselLevel = return_percent(distance_detect(DIESEL_TRIG, DIESEL_ECHO, DIESEL_TANK_HEIGHT), DIESEL_TANK_HEIGHT);
+    keroseneLevel = return_percent(distance_detect(KEROS_TRIG, KEROS_ECHO, KEROS_TANK_HEIGHT), KEROS_TANK_HEIGHT);
+    petrolLevel = return_percent(distance_detect(PETRO_TRIG, PETRO_ECHO, PETROL_TANK_HEIGHT), PETROL_TANK_HEIGHT);
 
     // The below section is to print onto  the serial Monitor
     Serial.print("The Level of the Diesel tank is: ");
@@ -85,6 +84,15 @@ void loop()
 
     reConnectToHost(HOST, PORT);
 }
+
+/**
+ * make value return percentage
+ */
+
+ double return_percent(double val, double hieght)
+ {
+  return (val/hieght) * 100;
+ }
 
 /**
  * setting up wifi module connections
@@ -112,9 +120,6 @@ void wifi_setup()
 
   expect_AT_OK("+CIPMUX=0", 6000);    // Allow multiple connections (we'll only use the first).
 
-  boolean connection_established = false;  // Initialize connection state
-
-
   expect_AT_OK("+CWQAP", 3000);
   _delay_ms(500);
   
@@ -128,7 +133,7 @@ void wifi_setup()
         _delay_ms(4000);
         if (expect_AT_OK("+CIPSTATUS", 6000)){
             Serial.println("Connected!!!");
-            connection_established = true;       // Set connection state
+            is_connected_to_network = true;       // Set connection state
             break;                               // Break connection loop
         }  
       }
@@ -137,7 +142,7 @@ void wifi_setup()
     expect_AT_OK("+CIPCLOSE", 3000);
     _delay_ms(3000);
     
-  if (connection_established)   {           // If connection attempts failed
+  if (is_connected_to_network)   {           // If connection attempts failed
       reConnectToHost(HOST, PORT);
       delay(2000);                            // Indicate there was an error
   }
@@ -145,7 +150,8 @@ void wifi_setup()
 
 void print_level(double level_value)
 {
-  Serial.println(level_value);
+  Serial.print(level_value);
+  Serial.println("%");
   _delay_ms(1000);
 }
 
@@ -174,6 +180,7 @@ double distance_detect(uint8_t trig_pin, uint8_t echo_pin, double tank_height)
   digitalWrite(trig_pin, LOW);
   duration = pulseIn(echo_pin, HIGH);
   distance = static_cast<double>(duration)/58.2;
+  if(distance == 0) return 0;
   return (tank_height - distance);
 }
 
