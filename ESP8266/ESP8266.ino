@@ -53,11 +53,14 @@ void setup()
   pinMode(CONNECT_HOST_LED, OUTPUT);
   pinMode(CONNECT_WIFI_LED, OUTPUT);
   pinMode(MODULE_RST, OUTPUT);
+  digitalWrite(CONNECT_WIFI_LED, LOW);
   digitalWrite(CONNECT_HOST_LED, LOW);
   digitalWrite(MODULE_RST, HIGH);
 
   ultra_module_config();
   wifi_setup();
+//  interrupts();
+//  attachInterrupt(confirm_network, 3000000);
 }
 
 void loop()
@@ -66,6 +69,8 @@ void loop()
 //  while (ESP8266.available() > 0) {
 //      Serial.write(ESP8266.read());
 //    }
+
+//    confirm_network();
 
     eat_echo();
 
@@ -89,6 +94,22 @@ void loop()
     delay(3000);
 
     reConnectToHost(HOST, PORT);
+}
+
+void confirm_network()
+{
+    eat_echo();
+
+    ESP8266.println("AT+CIPSTATUS");
+    //debug the command 
+    Serial.println("AT+CIPSTATUS");
+    delay(500);
+        
+   if(!ESP8266.find("STATUS:3"))
+   {
+      Serial.println("Interrupt:: Not connected...!!!");
+      module_restart();
+   }
 }
 
 /**
@@ -143,6 +164,7 @@ void wifi_setup()
     _delay_ms(3000);
     
   if (is_connected_to_network)   {           // If connection attempts failed
+      digitalWrite(CONNECT_WIFI_LED, HIGH);
       reConnectToHost(HOST, PORT);
       delay(2000);                            // Indicate there was an error
   }
